@@ -8,21 +8,27 @@ then
 echo "You must be root user to run this program"
 exit
 fi
-################################################################################
-# Process the input options #
-################################################################################
-# Get the options
-while getopts ":cr" option; do
-case $option in
-c) # Check option
-Check=1;;
-r) # Reboot option
-doReboot=1;;
-\?) # incorrect option
-echo "Error: Invalid option."
-exit;;
-esac
-done
+###############################################################################
+# Help function
+###############################################################################
+Help()
+{
+echo "doUpdates"
+echo ""
+echo "Installs all available updates from Fedora repositories. Can reboot"
+echo "after updates if certain packages are updated. Those packages are:"
+echo ""
+echo "1. The kernel"
+echo "2. glibc"
+echo "3. systemd"
+echo ""
+echo "Syntax: doUpdates [-c|h|r]"
+echo "Options:"
+echo "-c Check whether updates are available and exit."
+echo "-h Print this Help and exit."
+echo "-r Reboot if specific trigger packages are updated"
+echo ""
+} # end of Help()
 ###############################################################################
 # Initialize variables
 ###############################################################################
@@ -30,6 +36,64 @@ Check=1
 doReboot=0
 NeedsReboot=0
 UpdatesAvailable=0
+UpdatesFiles="/tmp/update.list"
+################################################################################
+# Process the input options #
+################################################################################
+# Get the options
+while getopts ":chr" option; do
+case $option in
+c) # Check option
+Check=1;;
+h) # Help function
+Help
+exit;;
+r) # Reboot option
+doReboot=1;;
+\?) # incorrect option
+echo "Error: Invalid option."
+exit;;
+esac
+done
+################################################################################
+# Are updates available? Just quit with message if not.
+# RC from dnf check-update = 100 if available and 0 if none available.
+# One side effect is to create list of updates that can be searched for
+# items that trigger a reboot.
+################################################################################
+dnf check-update > $UpdatesFile
+UpdatesAvailable=$?
+if [ $UpdatesAvailable == 0 ]
+then
+echo "Updates are NOT available for host $HOSTNAME at this time."
+exit
+else
+echo "Updates ARE available for host $HOSTNAME."
+if [ $Check == 1 ]
+then
+exit
+fi
+fi
+# Does the update include a new kernel
+if grep ^kernel $UpdatesFile > /dev/null
+then
+NeedsReboot=1
+echo "Kernel update for $HOSTNAME."
+fi
+# Or is there a new glibc
+if grep ^glibc $UpdatesFile > /dev/null
+then
+NeedsReboot=1
+echo "glibc update for $HOSTNAME."
+fi
+# Or is there a new systemd
+if grep ^systemd $UpdatesFile > /dev/null
+then
+NeedsReboot=1
+echo "systemd update for $HOSTNAME."
+fi
+# Temporary exit
+exit
 ###############################################################################
 # Main body of the program
 ###############################################################################
@@ -44,9 +108,29 @@ mandb
 # update the grub configuration
 grub2-mkconfig > /boot/grub2/grub.cfg
 # Reboot if necessary
-if [ $doReboot == 1 ]
+# Reboot if necessary
+if [ $NeedsReboot == 0 ]
+then
+echo
+echo "######################################################"
+echo "A reboot is not required."
+echo "######################################################"
+elif [ $doReboot == 1 ] && [ $NeedsReboot == 1 ]
 then
 reboot
+elif [ $doReboot == 0 ] && [ $NeedsReboot == 1 ]
+then
+echo
+echo "######################################################"
+echo "A reboot is needed."
+echo "Be sure to reboot at the earliest opportunity."
+echo "######################################################"
+echo
 else
-echo "Not rebooting."
+echo
+echo "######################################################"
+echo "An error has occurred and I cannot determine whether"
+echo "to reboot or not. Intervention is required."
+echo "######################################################"
+echo
 fi
