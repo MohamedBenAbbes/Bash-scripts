@@ -1,0 +1,52 @@
+#!/usr/bin/bash
+#
+###############################################################################
+# Check for root
+###############################################################################
+if [ `id -u` != 0 ]
+then
+echo "You must be root user to run this program"
+exit
+fi
+################################################################################
+# Process the input options #
+################################################################################
+# Get the options
+while getopts ":cr" option; do
+case $option in
+c) # Check option
+Check=1;;
+r) # Reboot option
+doReboot=1;;
+\?) # incorrect option
+echo "Error: Invalid option."
+exit;;
+esac
+done
+###############################################################################
+# Initialize variables
+###############################################################################
+Check=1
+doReboot=0
+NeedsReboot=0
+UpdatesAvailable=0
+###############################################################################
+# Main body of the program
+###############################################################################
+# First we decide whether to do the updates or just check whether any are available
+if [ $Check == 1 ]
+then
+# Check for updates
+dnf check-update
+fi
+# Update the man database
+mandb
+# update the grub configuration
+grub2-mkconfig > /boot/grub2/grub.cfg
+# Reboot if necessary
+if [ $doReboot == 1 ]
+then
+reboot
+else
+echo "Not rebooting."
+fi
